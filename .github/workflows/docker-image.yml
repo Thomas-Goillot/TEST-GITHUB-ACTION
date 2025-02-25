@@ -1,0 +1,42 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Se connecter à DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Recherche, construction et push des images Docker
+        run: |
+          echo "Recherche des Dockerfiles dans tous les dossiers..."
+          # Trouve tous les fichiers nommés "Dockerfile"
+          for dockerfile in $(find . -type f -name "Dockerfile"); do
+            echo "Dockerfile trouvé: $dockerfile"
+            # Récupérer le dossier contenant le Dockerfile
+            folder=$(dirname "$dockerfile")
+            # Générer un nom d'image basé sur le chemin du dossier.
+            # Ex: "./service1" donnera "service1", "./backend/service2" donnera "backend-service2"
+            image=$(echo "$folder" | sed 's|^\./||; s|/|-|g')
+            # Si le Dockerfile est à la racine, on lui attribue un nom par défaut "root"
+            if [ -z "$image" ]; then
+              image="root"
+            fi
+            full_image_name="${{ secrets.DOCKERHUB_USERNAME }}/${image}:latest"
+            echo "Construction de l'image: $full_image_name depuis le dossier: $folder"
+            docker build -t "$full_image_name" -f "$dockerfile" "$folder"
+            echo "Push de l'image: $full_image_name sur DockerHub"
+            docker push "$full_image_name"
+          done
